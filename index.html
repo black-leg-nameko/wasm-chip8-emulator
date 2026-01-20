@@ -1,57 +1,76 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>Wasm CHIP-8 Debugger</title>
-    <style>
-        body { background: #1a1a1a; color: #00ff00; font-family: monospace; display: flex; flex-direction: column; align-items: center; }
-        canvas { background: #000; border: 2px solid #333; width: 640px; height: 320px; image-rendering: pixelated; }
-        .status { margin-top: 20px; padding: 10px; border: 1px solid #00ff00; }
-    </style>
-</head>
-<body>
-    <h1>CHIP-8 WASM Runtime</h1>
-    <canvas id="chip8-screen" width="64" height="32"></canvas>
-    
-    <div class="status">
-        PC: <span id="reg-pc">0x000</span><br>
-        Status: <span id="msg">Initializing...</span>
-    </div>
+    <head>
+        <meta charset="UTF-8">
+        <title>Wasm CHIP-8 Debugger</title>
+        <style>
+body { background: #1a1a1a; color: #00ff00; font-family: monospace; display: flex; flex-direction: column; align-items: center; }
+canvas { background: #000; border: 2px solid #333; width: 640px; height: 320px; image-rendering: pixelated; }
+.status { margin-top: 20px; padding: 10px; border: 1px solid #00ff00; }
+        </style>
+    </head>
+    <body>
+        <h1>CHIP-8 WASM Runtime</h1>
+        <canvas id="chip8-screen" width="64" height="32"></canvas>
+        <div class="status">
+            PC: <span id="reg-pc">0x000</span><br>
+            Status: <span id="msg">Initializing...</span>
+        </div>
 
-    <script type="module">
-        import init, { Chip8 } from './pkg/chip8_wasm.js';
+        <script type="module">
+            import init, { Chip8 } from './pkg/chip8_wasm.js';
 
         async function run() {
-            // Wasmの初期化
-            await init();
-            
-            // Rust側の構造体をインスタンス化
-            const vm = new Chip8();
-            const msgEl = document.getElementById('msg');
-            const pcEl = document.getElementById('reg-pc');
+            try {
+                const wasm = await init();
+                const vm = new Chip8();
 
-            // 動作確認用のループ
-            function step() {
-                vm.tick(); // Rust側のtickメソッドを呼ぶ
+                // Expose to window for debugging
+                window.vm = vm;
+                window.wasm = wasm;
+
+                const msgEl = document.getElementById('msg');
+                msgEl.innerText = "Running! (Use WASD to Move)";
+
+                const canvas = document.getElementById('chip8-screen');
+                const ctx = canvas.getContext('2d');
+
+                window.addEventListener('keydown', (e) => {
+                    switch(e.key.toLowerCase()) {
+                        case 'w': vm.move_v1(-1); break;
+                        case 's': vm.move_v1(1);  break;
+                        case 'a': vm.move_v0(-1); break;
+                        case 'd': vm.move_v0(1);  break;
+                    }
+                });
+
+                function update() {
+                    // 1) Position registers (V0, V1) are updated via WASD
+                    // 2) Reset PC to D014 (draw instruction)
+                    vm.reset_pc_for_test(); 
+                    // 3) Execute (draws the square at the new position)
+                    vm.tick(); 
                 
-                // Rust側のPC（プログラムカウンタ）を取得
-                // ※Rust側でpub属性がついているフィールドはJSから参照可能
-                pcEl.innerText = `0x${vm.pc.toString(16).toUpperCase()}`;
-
-                if (vm.pc === 0x200) {
-                    msgEl.innerText = "Jump Success! (0x200 Loop)";
-                } else {
-                    msgEl.innerText = "Running...";
+                    const displayPtr = vm.get_display_ptr();
+                    const displayArray = new Uint8Array(wasm.memory.buffer, displayPtr, 64 * 32);
+                
+                    // Render canvas
+                    ctx.clearRect(0, 0, 64, 32);
+                    ctx.fillStyle = "#00ff00";
+                    for (let i = 0; i < displayArray.length; i++) {
+                        if (displayArray[i] !== 0) {
+                            ctx.fillRect(i % 64, Math.floor(i / 64), 1, 1);
+                        }
+                    }
+                    requestAnimationFrame(update);
                 }
-
-                // 本来はループさせますが、今回は1回動作を確認
-                // requestAnimationFrame(step); 
+                update();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('msg').innerText = "Error: " + e.message;
             }
-
-            step();
         }
-
         run();
-    </script>
-</body>
+        </script>
+    </body>
 </html>
