@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Wasm CHIP-8 Debugger</title>
+    <style>
+        body { background: #1a1a1a; color: #00ff00; font-family: monospace; display: flex; flex-direction: column; align-items: center; }
+        canvas { background: #000; border: 2px solid #333; width: 640px; height: 320px; image-rendering: pixelated; }
+        .status { margin-top: 20px; padding: 10px; border: 1px solid #00ff00; }
+    </style>
+</head>
+<body>
+    <h1>CHIP-8 WASM Runtime</h1>
+    <canvas id="chip8-screen" width="64" height="32"></canvas>
+    
+    <div class="status">
+        PC: <span id="reg-pc">0x000</span><br>
+        Status: <span id="msg">Initializing...</span>
+    </div>
+
+    <script type="module">
+        import init, { Chip8 } from './pkg/chip8_wasm.js';
+
+        async function run() {
+            // Wasmの初期化
+            await init();
+            
+            // Rust側の構造体をインスタンス化
+            const vm = new Chip8();
+            const msgEl = document.getElementById('msg');
+            const pcEl = document.getElementById('reg-pc');
+
+            // 動作確認用のループ
+            function step() {
+                vm.tick(); // Rust側のtickメソッドを呼ぶ
+                
+                // Rust側のPC（プログラムカウンタ）を取得
+                // ※Rust側でpub属性がついているフィールドはJSから参照可能
+                pcEl.innerText = `0x${vm.pc.toString(16).toUpperCase()}`;
+
+                if (vm.pc === 0x200) {
+                    msgEl.innerText = "Jump Success! (0x200 Loop)";
+                } else {
+                    msgEl.innerText = "Running...";
+                }
+
+                // 本来はループさせますが、今回は1回動作を確認
+                // requestAnimationFrame(step); 
+            }
+
+            step();
+        }
+
+        run();
+    </script>
+</body>
+</html>
